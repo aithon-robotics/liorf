@@ -14,6 +14,21 @@ POINT_CLOUD_REGISTER_POINT_STRUCT (VelodynePointXYZIRT,
     (uint16_t, ring, ring) (float, time, time)
 )
 
+
+struct LivoxPointXYZIRT
+{
+    PCL_ADD_POINT4D
+    float intensity;
+    uint8_t tag;
+    uint8_t line;
+    float time;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+POINT_CLOUD_REGISTER_POINT_STRUCT(LivoxPointXYZIRT, 
+      (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)
+      (uint8_t, tag, tag)(uint8_t, line, line)(float, time, time)
+)
+
 struct OusterPointXYZIRT {
     PCL_ADD_POINT4D;
     float intensity;
@@ -91,9 +106,16 @@ private:
     Eigen::Affine3f transStartInverse;
 
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn;
+    pcl::PointCloud<LivoxPointXYZIRT>::Ptr tmpLivoxCloudIn;
     pcl::PointCloud<OusterPointXYZIRT>::Ptr tmpOusterCloudIn;
     pcl::PointCloud<MulranPointXYZIRT>::Ptr tmpMulranCloudIn;
     pcl::PointCloud<PointType>::Ptr   fullCloud;
+    // pcl::PointCloud<PointXYZIRT>::Ptr transformed_cloud;
+
+    // Eigen::Matrix4f T_LI = (Eigen::Matrix4f() << 1,  0,  0,  0,
+    //                                             0, -1,  0,  0,
+    //                                             0,  0, -1,  0,
+    //                                             0,  0,  0,  1).finished();
 
     int deskewFlag;
 
@@ -133,6 +155,7 @@ public:
     void allocateMemory()
     {
         laserCloudIn.reset(new pcl::PointCloud<PointXYZIRT>());
+        tmpLivoxCloudIn.reset(new pcl::PointCloud<LivoxPointXYZIRT>());
         tmpOusterCloudIn.reset(new pcl::PointCloud<OusterPointXYZIRT>());
         tmpMulranCloudIn.reset(new pcl::PointCloud<MulranPointXYZIRT>());
         fullCloud.reset(new pcl::PointCloud<PointType>());
@@ -169,21 +192,21 @@ public:
         imuQueue.push_back(thisImu);
 
         // debug IMU data
-        // cout << std::setprecision(6);
-        // cout << "IMU acc: " << endl;
-        // cout << "x: " << thisImu.linear_acceleration.x << 
-        //       ", y: " << thisImu.linear_acceleration.y << 
-        //       ", z: " << thisImu.linear_acceleration.z << endl;
-        // cout << "IMU gyro: " << endl;
-        // cout << "x: " << thisImu.angular_velocity.x << 
-        //       ", y: " << thisImu.angular_velocity.y << 
-        //       ", z: " << thisImu.angular_velocity.z << endl;
-        // double imuRoll, imuPitch, imuYaw;
-        // tf2::Quaternion orientation;
-        // tf2::fromMsg(thisImu.orientation, orientation);
-        // tf2::Matrix3x3(orientation).getRPY(imuRoll, imuPitch, imuYaw);
-        // cout << "IMU roll pitch yaw: " << endl;
-        // cout << "roll: " << imuRoll << ", pitch: " << imuPitch << ", yaw: " << imuYaw << endl << endl;
+        cout << std::setprecision(6);
+        cout << "IMU acc: " << endl;
+        cout << "x: " << thisImu.linear_acceleration.x << 
+              ", y: " << thisImu.linear_acceleration.y << 
+              ", z: " << thisImu.linear_acceleration.z << endl;
+        cout << "IMU gyro: " << endl;
+        cout << "x: " << thisImu.angular_velocity.x << 
+              ", y: " << thisImu.angular_velocity.y << 
+              ", z: " << thisImu.angular_velocity.z << endl;
+        double imuRoll, imuPitch, imuYaw;
+        tf2::Quaternion orientation;
+        tf2::fromMsg(thisImu.orientation, orientation);
+        tf2::Matrix3x3(orientation).getRPY(imuRoll, imuPitch, imuYaw);
+        cout << "IMU roll pitch yaw: " << endl;
+        cout << "roll: " << imuRoll << ", pitch: " << imuPitch << ", yaw: " << imuYaw << endl << endl;
     }
 
     void odometryHandler(const nav_msgs::msg::Odometry::SharedPtr odometryMsg)
@@ -199,6 +222,9 @@ public:
 
         if (!deskewInfo())
             return;
+
+        // transformPointCloud(laserCloudIn);
+        // pcl::transformPointCloud(*laserCloudIn, *laserCloudIn, LidarRot);
 
         projectPointCloud();
 
@@ -217,9 +243,26 @@ public:
         // convert cloud
         currentCloudMsg = std::move(cloudQueue.front());
         cloudQueue.pop_front();
-        if (sensor == SensorType::VELODYNE || sensor == SensorType::LIVOX)
+        if (sensor == SensorType::VELODYNE)
         {
             pcl::moveFromROSMsg(currentCloudMsg, *laserCloudIn);
+        }
+        else if (sensor == SensorType::LIVOX)
+        {
+            pcl::moveFromROSMsg(currentCloudMsg, *tmpLivoxCloudIn);
+            laserCloudIn->points.resize(tmpLivoxCloudIn->size());
+            laserCloudIn->is_dense = tmpLivoxCloudIn->is_dense;
+            for (size_t i = 0; i < tmpLivoxCloudIn->size(); i++)
+            {
+                auto &src = tmpLivoxCloudIn->points[i];
+                auto &dst = laserCloudIn->points[i];
+                dst.x = src.x;
+                dst.y = src.y;
+                dst.z = src.z;
+                dst.intensity = src.intensity;
+                dst.ring = src.line;
+                dst.time = src.time;
+            }
         }
         else if (sensor == SensorType::OUSTER)
         {
@@ -300,7 +343,8 @@ public:
             ringFlag = -1;
             for (int i = 0; i < (int)currentCloudMsg.fields.size(); ++i)
             {
-                if (currentCloudMsg.fields[i].name == "ring")
+                //added for livox
+                if (currentCloudMsg.fields[i].name == "ring" || currentCloudMsg.fields[i].name == "line")
                 {
                     ringFlag = 1;
                     break;
@@ -319,7 +363,7 @@ public:
             deskewFlag = -1;
             for (auto &field : currentCloudMsg.fields)
             {
-                if (field.name == "time" || field.name == "t")
+                if (field.name == "time" || field.name == "t" || field.name == "timestamp")
                 {
                     deskewFlag = 1;
                     break;
@@ -572,6 +616,10 @@ public:
     void projectPointCloud()
     {
         int cloudSize = laserCloudIn->points.size();
+        
+        // pocl::transformPointCloud (*laserCloudIn, *transformed_cloud, T_LI);
+        // laserCludIn->points = transformed_cloud->points;
+        // cout << "Transformed point cloud size: " << transformed_cloud->points.size() << endl;
         // range image projection
         for (int i = 0; i < cloudSize; ++i)
         {
@@ -599,6 +647,25 @@ public:
 
             fullCloud->push_back(thisPoint);
         }
+    }
+    
+    void transformPointCloud(pcl::PointCloud<PointXYZIRT>::Ptr  cloud_in)
+    {
+        // LidarRot
+        if (!cloud_in) return;
+        // LidarRot
+
+        // pcl::transformPointCloud (*cloud_in, *cloud_in, T_LI);
+        
+        // for (auto &pt : cloud_in->points) {
+        //     if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || !std::isfinite(pt.z)) continue;
+        //     Eigen::Vector3d p(pt.x, pt.y, pt.z);
+        //     p = LidarRot * p;
+        //     pt.x = static_cast<decltype(pt.x)>(p.x());
+        //     pt.y = static_cast<decltype(pt.y)>(p.y());
+        //     pt.z = static_cast<decltype(pt.z)>(p.z());
+        // }
+        
     }
     
     void publishClouds()

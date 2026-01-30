@@ -117,10 +117,15 @@ public:
     float imuRPYWeight;
     vector<double> extRotV;
     vector<double> extRPYV;
+    vector<double> LidarRotV;
     vector<double> extTransV;
+    vector<double> LidarTransV;
     Eigen::Matrix3d extRot;
     Eigen::Matrix3d extRPY;
+    Eigen::Matrix3d LidarRot;
     Eigen::Vector3d extTrans;
+    Eigen::Vector3d LidarTrans;
+    Eigen::Vector3d LidarTF;
     Eigen::Quaterniond extQRPY;
 
     // voxel filter paprams
@@ -260,15 +265,27 @@ public:
         get_parameter("extrinsicRot", extRotV);
         declare_parameter("extrinsicRPY", id);
         get_parameter("extrinsicRPY", extRPYV);
+        declare_parameter("LidarRot", id);
+        get_parameter("LidarRot", LidarRotV);
         double zea[] = {0.0, 0.0, 0.0};
         std::vector < double > ze(zea, std::end(zea));
         declare_parameter("extrinsicTrans", ze);
         get_parameter("extrinsicTrans", extTransV);
+        declare_parameter("LidarTrans", ze);
+        get_parameter("LidarTrans", LidarTransV);
+
+
+        
 
         extRot = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(extRotV.data(), 3, 3);
         extRPY = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(extRPYV.data(), 3, 3);
+        LidarRot = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(LidarRotV.data(), 3, 3);
         extTrans = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(extTransV.data(), 3, 1);
-        extQRPY = Eigen::Quaterniond(extRPY).inverse();
+        LidarTrans = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(LidarTransV.data(), 3, 1);
+        // LidarTF = Eigen::Matrix4d::Identity();
+        // LidarTF.block<3,3>(0,0) = LidarRot;
+        // LidarTF.block<3,1>(0,3) = LidarTrans;
+        // extQRPY = Eigen::Quaterniond(extRPY).inverse();
 
         declare_parameter<float>("mappingSurfLeafSize", 0.2f);
         get_parameter("mappingSurfLeafSize", mappingSurfLeafSize);
@@ -326,7 +343,9 @@ public:
         sensor_msgs::msg::Imu imu_out = imu_in;
         // rotate acceleration
         Eigen::Vector3d acc(imu_in.linear_acceleration.x, imu_in.linear_acceleration.y, imu_in.linear_acceleration.z);
-        acc = extRot * acc;
+        acc = extRot * acc * 9.81; //imuGravity;
+        // printf("acc before: %f, %f, %f\n", imu_in.linear_acceleration.x, imu_in.linear_acceleration.y, imu_in.linear_acceleration.z);
+        // printf("acc after: %f, %f, %f\n", acc.x(), acc.y(), acc.z());
         imu_out.linear_acceleration.x = acc.x();
         imu_out.linear_acceleration.y = acc.y();
         imu_out.linear_acceleration.z = acc.z();

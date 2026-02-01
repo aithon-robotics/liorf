@@ -30,6 +30,8 @@ find_package(GTSAM REQUIRED)
 find_package(Eigen REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(Boost REQUIRED COMPONENTS timer)
+find_package(livox_ros_driver2 REQUIRED) # <--- Add this
+find_package(pcl_conversions REQUIRED) # <--- Add this
 
 set(ros2_lib "rclcpp;rclpy;std_msgs;sensor_msgs;geometry_msgs;nav_msgs;cv_bridge;pcl_msgs;pcl_conversions;visualization_msgs;tf2;tf2_ros;tf2_eigen;tf2_sensor_msgs;tf2_geometry_msgs")
 
@@ -50,6 +52,7 @@ include_directories(
 	${PCL_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
 	${GTSAM_INCLUDE_DIR}
+  ${PCL_INCLUDE_DIRS}
 )
 
 # link directories
@@ -69,7 +72,7 @@ file(GLOB common_lib "lib/*.cpp")
 # <!-- liorf_yjz_lucky_boy -->
 # Range Image Projection
 add_executable(${PROJECT_NAME}_imageProjection src/imageProjection.cpp ${common_lib})
-ament_target_dependencies(${PROJECT_NAME}_imageProjection ${ros2_lib})
+ament_target_dependencies(${PROJECT_NAME}_imageProjection ${ros2_lib} livox_ros_driver2)
 target_link_libraries(${PROJECT_NAME}_imageProjection "${cpp_typesupport_target}" ${PCL_LIBRARIES} ${OpenCV_LIBRARIES})
 
 # # Mapping Optimization
@@ -83,6 +86,15 @@ add_executable(${PROJECT_NAME}_imuPreintegration src/imuPreintegration.cpp ${com
 ament_target_dependencies(${PROJECT_NAME}_imuPreintegration ${ros2_lib})
 target_link_libraries(${PROJECT_NAME}_imuPreintegration Boost::timer "${cpp_typesupport_target}" ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} gtsam)
 
+add_executable(livox_converter src/livox_converter.cpp) # added livox_converter executable
+ament_target_dependencies(livox_converter 
+    rclcpp 
+    sensor_msgs 
+    livox_ros_driver2 
+    pcl_conversions
+)
+
+
 install(
   DIRECTORY launch config rviz
   DESTINATION share/${PROJECT_NAME}/
@@ -93,6 +105,7 @@ install(
 	${PROJECT_NAME}_imageProjection
 	${PROJECT_NAME}_imuPreintegration
 	${PROJECT_NAME}_mapOptmization
+	livox_converter # install livox_converter executable
   DESTINATION lib/${PROJECT_NAME}
 )
 

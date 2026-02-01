@@ -78,6 +78,8 @@ const int queueLength = 2000;
 
 class ImageProjection : public ParamServer
 {
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 private:
 
     std::mutex imuLock;
@@ -110,7 +112,9 @@ private:
     pcl::PointCloud<OusterPointXYZIRT>::Ptr tmpOusterCloudIn;
     pcl::PointCloud<MulranPointXYZIRT>::Ptr tmpMulranCloudIn;
     pcl::PointCloud<PointType>::Ptr   fullCloud;
-    // pcl::PointCloud<PointXYZIRT>::Ptr transformed_cloud;
+    pcl::PointCloud<PointXYZIRT>::Ptr transformed_cloud;
+    Eigen::Vector4f point;
+    Eigen::Vector4f point_transformed;
 
     // Eigen::Matrix4f T_LI = (Eigen::Matrix4f() << 1,  0,  0,  0,
     //                                             0, -1,  0,  0,
@@ -139,8 +143,8 @@ public:
         subOdom = create_subscription<nav_msgs::msg::Odometry>(odomTopic+"_incremental", QosPolicy(history_policy, reliability_policy),
                     std::bind(&ImageProjection::odometryHandler, this, std::placeholders::_1));
 
-        subLaserCloud = create_subscription<sensor_msgs::msg::PointCloud2>(pointCloudTopic, QosPolicy(history_policy, reliability_policy), 
-                    std::bind(&ImageProjection::cloudHandler, this, std::placeholders::_1));
+            subLaserCloud = create_subscription<sensor_msgs::msg::PointCloud2>(pointCloudTopic, QosPolicy(history_policy, reliability_policy), 
+                        std::bind(&ImageProjection::cloudHandler, this, std::placeholders::_1));
 
         pubExtractedCloud = create_publisher<sensor_msgs::msg::PointCloud2>( "liorf/deskew/cloud_deskewed", QosPolicy(history_policy, reliability_policy));
 
@@ -322,7 +326,7 @@ public:
         else {
             RCLCPP_ERROR_STREAM(get_logger(), "Unknown sensor type: " << int(sensor));
             rclcpp::shutdown();
-        }
+            }
 
         // get timestamp
         cloudHeader = currentCloudMsg.header;
@@ -623,10 +627,16 @@ public:
         // range image projection
         for (int i = 0; i < cloudSize; ++i)
         {
+            point = Eigen::Vector4f(laserCloudIn->points[i].x, laserCloudIn->points[i].y, laserCloudIn->points[i].z, 1.0f);
+            // Use float-precision LidarTF to match the Vector4f type and avoid mixed double/float Eigen products
+            point_transformed = getLidarTFf() * point;
             PointType thisPoint;
-            thisPoint.x = laserCloudIn->points[i].x;
-            thisPoint.y = laserCloudIn->points[i].y;
-            thisPoint.z = laserCloudIn->points[i].z;
+            // thisPoint.x = laserCloudIn->points[i].x;
+            // thisPoint.y = laserCloudIn->points[i].y;
+            // thisPoint.z = laserCloudIn->points[i].z;
+            thisPoint.x = point_transformed(0);
+            thisPoint.y = point_transformed(1);
+            thisPoint.z = point_transformed(2);
             thisPoint.intensity = laserCloudIn->points[i].intensity;
 
             float range = common_lib_->pointDistance(thisPoint);

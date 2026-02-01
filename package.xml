@@ -34,6 +34,8 @@
   <build_depend>pcl_conversions</build_depend>
   <build_depend>cv_bridge</build_depend>
   <build_depend>Boost</build_depend>
+  <build_depend>livox_ros_driver2</build_depend>
+  <build_depend>pcl_conversions</build_depend>
 
   <exec_depend>Boost</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
@@ -55,6 +57,8 @@
   <exec_depend>PCL</exec_depend>
   <exec_depend>GTSAM</exec_depend>
   <exec_depend>Eigen</exec_depend>
+  <exec_depend>pcl_conversions</exec_depend>
+  <exec_depend>livox_ros_driver2</exec_depend>
   <exec_depend>pcl_conversions</exec_depend>
   
   <member_of_group>rosidl_interface_packages</member_of_group>

@@ -65,10 +65,12 @@ typedef pcl::PointXYZI PointType;
 // <!-- liorf_localization_yjz_lucky_boy -->
 std::shared_ptr<CommonLib::common_lib> common_lib_;
 
-enum class SensorType { VELODYNE, OUSTER, LIVOX, ROBOSENSE, MULRAN};
+enum class SensorType { VELODYNE, OUSTER, LIVOX, ROBOSENSE, MULRAN, LIVOX_CUSTOMPCL};
 
 class ParamServer : public rclcpp::Node
 {
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
     string history_policy;
     string reliability_policy;
@@ -125,8 +127,13 @@ public:
     Eigen::Matrix3d LidarRot;
     Eigen::Vector3d extTrans;
     Eigen::Vector3d LidarTrans;
-    Eigen::Vector3d LidarTF;
+    Eigen::Matrix4d LidarTF;
     Eigen::Quaterniond extQRPY;
+
+    // Return Lidar transform as single-precision matrix for use with PCL (which expects float matrices)
+    Eigen::Matrix4f getLidarTFf() const {
+        return LidarTF.cast<float>();
+    }
 
     // voxel filter paprams
     float mappingSurfLeafSize ;
@@ -282,10 +289,10 @@ public:
         LidarRot = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(LidarRotV.data(), 3, 3);
         extTrans = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(extTransV.data(), 3, 1);
         LidarTrans = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(LidarTransV.data(), 3, 1);
-        // LidarTF = Eigen::Matrix4d::Identity();
-        // LidarTF.block<3,3>(0,0) = LidarRot;
-        // LidarTF.block<3,1>(0,3) = LidarTrans;
-        // extQRPY = Eigen::Quaterniond(extRPY).inverse();
+        LidarTF = Eigen::Matrix4d::Identity();
+        LidarTF.block<3,3>(0,0) = LidarRot;
+        LidarTF.block<3,1>(0,3) = LidarTrans;
+        extQRPY = Eigen::Quaterniond(extRPY).inverse();
 
         declare_parameter<float>("mappingSurfLeafSize", 0.2f);
         get_parameter("mappingSurfLeafSize", mappingSurfLeafSize);
@@ -343,7 +350,7 @@ public:
         sensor_msgs::msg::Imu imu_out = imu_in;
         // rotate acceleration
         Eigen::Vector3d acc(imu_in.linear_acceleration.x, imu_in.linear_acceleration.y, imu_in.linear_acceleration.z);
-        acc = extRot * acc * 9.81; //imuGravity;
+        acc = extRot * acc * imuGravity; //imuGravity;
         // printf("acc before: %f, %f, %f\n", imu_in.linear_acceleration.x, imu_in.linear_acceleration.y, imu_in.linear_acceleration.z);
         // printf("acc after: %f, %f, %f\n", acc.x(), acc.y(), acc.z());
         imu_out.linear_acceleration.x = acc.x();

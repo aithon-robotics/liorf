@@ -342,7 +342,7 @@ public:
         }
         else if (sensor == SensorType::HESAI)
         {
-            RCLCPP_INFO(get_logger(), "HESAI SENSOR");
+            // RCLCPP_INFO(get_logger(), "HESAI SENSOR");
             pcl::PointCloud<HesaiPoint>::Ptr tmpHesaiCloudIn(new pcl::PointCloud<HesaiPoint>());
             pcl::moveFromROSMsg(currentCloudMsg, *tmpHesaiCloudIn);
 
@@ -381,7 +381,7 @@ public:
                 
                 laserCloudIn->push_back(dst);
             }
-            RCLCPP_INFO(get_logger(), "Hesai point cloud: %zu points, %zu invalid points", laserCloudIn->points.size(), invalid_points);
+            // RCLCPP_INFO(get_logger(), "Hesai point cloud: %zu points, %zu invalid points", laserCloudIn->points.size(), invalid_points);
 
             if (laserCloudIn->points.empty()) {
                 RCLCPP_INFO(get_logger(), "All points  in the Hesai point cloud are invalid (NaN).");
@@ -447,7 +447,7 @@ public:
             if (deskewFlag == -1)
                 RCLCPP_WARN(get_logger(), "Point cloud timestamp not available, deskew function disabled, system will drift significantly!");
         }
-        RCLCPP_INFO(get_logger(), "End cachePCL");
+        // RCLCPP_INFO(get_logger(), "End cachePCL");
         return true;
     }
 

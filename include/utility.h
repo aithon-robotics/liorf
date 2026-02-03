@@ -65,7 +65,7 @@ typedef pcl::PointXYZI PointType;
 // <!-- liorf_localization_yjz_lucky_boy -->
 std::shared_ptr<CommonLib::common_lib> common_lib_;
 
-enum class SensorType { VELODYNE, OUSTER, LIVOX, ROBOSENSE, MULRAN, LIVOX_CUSTOMPCL};
+enum class SensorType { VELODYNE, OUSTER, LIVOX, ROBOSENSE, MULRAN, LIVOX_CUSTOMPCL, HESAI};
 
 class ParamServer : public rclcpp::Node
 {
@@ -227,6 +227,10 @@ public:
         {
             sensor = SensorType::MULRAN;
         } 
+        else if (sensorStr == "hesai")
+        {
+            sensor = SensorType::HESAI;
+        }
         else {
             RCLCPP_ERROR_STREAM(
                 get_logger(),

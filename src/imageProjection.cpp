@@ -71,6 +71,22 @@ struct MulranPointXYZIRT {
      (uint32_t, t, t) (int, ring, ring)
  )
 
+struct HesaiPoint {
+                PCL_ADD_POINT4D;
+                float intensity;
+                uint16_t ring;
+                double timestamp;
+                EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+            } EIGEN_ALIGN16;
+// 2. Register it so PCL can use pcl::moveFromROSMsg
+POINT_CLOUD_REGISTER_POINT_STRUCT(HesaiPoint,
+    (float, x, x)
+    (float, y, y)
+    (float, z, z)
+    (float, intensity, intensity)
+    (uint16_t, ring, ring)
+    (double, timestamp, timestamp)
+)
 // Use the Velodyne point format as a common representation
 using PointXYZIRT = VelodynePointXYZIRT;
 
@@ -196,21 +212,21 @@ public:
         imuQueue.push_back(thisImu);
 
         // debug IMU data
-        cout << std::setprecision(6);
-        cout << "IMU acc: " << endl;
-        cout << "x: " << thisImu.linear_acceleration.x << 
-              ", y: " << thisImu.linear_acceleration.y << 
-              ", z: " << thisImu.linear_acceleration.z << endl;
-        cout << "IMU gyro: " << endl;
-        cout << "x: " << thisImu.angular_velocity.x << 
-              ", y: " << thisImu.angular_velocity.y << 
-              ", z: " << thisImu.angular_velocity.z << endl;
-        double imuRoll, imuPitch, imuYaw;
-        tf2::Quaternion orientation;
-        tf2::fromMsg(thisImu.orientation, orientation);
-        tf2::Matrix3x3(orientation).getRPY(imuRoll, imuPitch, imuYaw);
-        cout << "IMU roll pitch yaw: " << endl;
-        cout << "roll: " << imuRoll << ", pitch: " << imuPitch << ", yaw: " << imuYaw << endl << endl;
+        // cout << std::setprecision(6);
+        // cout << "IMU acc: " << endl;
+        // cout << "x: " << thisImu.linear_acceleration.x << 
+        //       ", y: " << thisImu.linear_acceleration.y << 
+        //       ", z: " << thisImu.linear_acceleration.z << endl;
+        // cout << "IMU gyro: " << endl;
+        // cout << "x: " << thisImu.angular_velocity.x << 
+        //       ", y: " << thisImu.angular_velocity.y << 
+        //       ", z: " << thisImu.angular_velocity.z << endl;
+        // double imuRoll, imuPitch, imuYaw;
+        // tf2::Quaternion orientation;
+        // tf2::fromMsg(thisImu.orientation, orientation);
+        // tf2::Matrix3x3(orientation).getRPY(imuRoll, imuPitch, imuYaw);
+        // cout << "IMU roll pitch yaw: " << endl;
+        // cout << "roll: " << imuRoll << ", pitch: " << imuPitch << ", yaw: " << imuYaw << endl << endl;
     }
 
     void odometryHandler(const nav_msgs::msg::Odometry::SharedPtr odometryMsg)
@@ -240,6 +256,7 @@ public:
     bool cachePointCloud(const sensor_msgs::msg::PointCloud2::SharedPtr& laserCloudMsg)
     {
         // cache point cloud
+        // double time_offset = 1769434253.619089624 - 1589938141.199961901;
         cloudQueue.push_back(*laserCloudMsg);
         if (cloudQueue.size() <= 2)
             return false;
@@ -322,7 +339,61 @@ public:
                 dst.ring = src.ring;
                 dst.time = src.timestamp - start_stamptime;
             }
-        } 
+        }
+        else if (sensor == SensorType::HESAI)
+        {
+            RCLCPP_INFO(get_logger(), "HESAI SENSOR");
+            pcl::PointCloud<HesaiPoint>::Ptr tmpHesaiCloudIn(new pcl::PointCloud<HesaiPoint>());
+            pcl::moveFromROSMsg(currentCloudMsg, *tmpHesaiCloudIn);
+
+            // Don't resize yet, use reserve to prevent reallocations
+            laserCloudIn->points.clear();
+            laserCloudIn->points.reserve(tmpHesaiCloudIn->size());
+
+            if (tmpHesaiCloudIn->empty()) 
+                {
+                    RCLCPP_INFO(get_logger(), "tmpHesaiCloudIn empty");
+                    return false;
+                }
+
+            double start_stamptime = tmpHesaiCloudIn->points[0].timestamp;
+            
+            size_t invalid_points = 0;
+            
+            for (size_t i = 0; i < tmpHesaiCloudIn->size(); i++)
+            {
+                auto &src = tmpHesaiCloudIn->points[i];
+                
+                // --- NANO CHECK ---
+                // Only add the point if x, y, and z are valid numbers
+                if (!std::isfinite(src.x) || !std::isfinite(src.y) || !std::isfinite(src.z)) {
+                    invalid_points++;
+                    continue; 
+                }
+
+                PointXYZIRT dst;
+                dst.x = src.x;
+                dst.y = src.y;
+                dst.z = src.z;
+                dst.intensity = src.intensity;
+                dst.ring = src.ring;
+                dst.time = static_cast<float>(src.timestamp - start_stamptime);
+                
+                laserCloudIn->push_back(dst);
+            }
+            RCLCPP_INFO(get_logger(), "Hesai point cloud: %zu points, %zu invalid points", laserCloudIn->points.size(), invalid_points);
+
+            if (laserCloudIn->points.empty()) {
+                RCLCPP_INFO(get_logger(), "All points  in the Hesai point cloud are invalid (NaN).");
+                return false;
+            }
+            
+            
+            // Now it is officially dense (no NaNs)
+            laserCloudIn->is_dense = true;
+            laserCloudIn->width = laserCloudIn->points.size();
+            laserCloudIn->height = 1;
+        }
         else {
             RCLCPP_ERROR_STREAM(get_logger(), "Unknown sensor type: " << int(sensor));
             rclcpp::shutdown();
@@ -332,7 +403,7 @@ public:
         cloudHeader = currentCloudMsg.header;
         timeScanCur = rclcpp::Time(cloudHeader.stamp).seconds();
         timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
-
+        
         // check dense flag
         if (laserCloudIn->is_dense == false)
         {
@@ -376,7 +447,7 @@ public:
             if (deskewFlag == -1)
                 RCLCPP_WARN(get_logger(), "Point cloud timestamp not available, deskew function disabled, system will drift significantly!");
         }
-
+        RCLCPP_INFO(get_logger(), "End cachePCL");
         return true;
     }
 
@@ -388,7 +459,10 @@ public:
         // make sure IMU data available for the scan
         if (imuQueue.empty() || ROS_TIME(imuQueue.front().header.stamp) > timeScanCur || ROS_TIME(imuQueue.back().header.stamp) < timeScanEnd)
         {
-            RCLCPP_DEBUG(get_logger(), "Waiting for IMU data ...");
+            RCLCPP_INFO(get_logger(), "Waiting for IMU data ...");
+            RCLCPP_INFO(get_logger(), "IMU queue size: %d", (int)imuQueue.size());
+            RCLCPP_INFO(get_logger(), "timeScanCur: %.6f, timeScanEnd: %.6f", timeScanCur, timeScanEnd);
+            RCLCPP_INFO(get_logger(), "imuQueue front time: %.6f, back time: %.6f", ROS_TIME(imuQueue.front().header.stamp), ROS_TIME(imuQueue.back().header.stamp));
             return false;
         }
 

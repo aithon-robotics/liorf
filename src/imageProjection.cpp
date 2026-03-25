@@ -332,6 +332,10 @@ public:
             for (size_t i = 0; i < tmpRobosenseCloudIn->size(); i++) {
                 auto &src = tmpRobosenseCloudIn->points[i];
                 auto &dst = laserCloudIn->points[i];
+                 // Only add the point if x, y, and z are valid numbers
+                if (!std::isfinite(src.x) || !std::isfinite(src.y) || !std::isfinite(src.z)) {
+                    continue; 
+                }
                 dst.x = src.x;
                 dst.y = src.y;
                 dst.z = src.z;

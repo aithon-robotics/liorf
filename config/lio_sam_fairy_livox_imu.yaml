@@ -2,12 +2,11 @@
   ros__parameters:
     history_policy: "history_keep_last"
     reliability_policy: "reliability_reliable"
-
     # Topics
     pointCloudTopic: "rslidar_points"               # Point cloud data
-    imuTopic: "rslidar_imu_data"                         # IMU data
+    imuTopic: "livox/imu"                         # IMU data
     odomTopic: "odometry/imu"                   # IMU pre-preintegration odometry, same frequency as IMU
-    gpsTopic: "gps/fixz"                   # GPS odometry topic from navsat, see module_navsat.launch file
+    gpsTopic: "odometry/gpsz"                   # GPS odometry topic from navsat, see module_navsat.launch file
 
     # Frames
     lidarFrame: "base_link"
@@ -16,8 +15,8 @@
     mapFrame: "map"
 
     # GPS Settings
-    useImuHeadingInitialization: true           # if using GPS data, set to "true"
-    useGpsElevation: true                      # if GPS elevation is bad, set to "false"
+    useImuHeadingInitialization: false           # if using GPS data, set to "true"
+    useGpsElevation: false                      # if GPS elevation is bad, set to "false"
     gpsCovThreshold: 2.0                        # m^2, threshold for using GPS data
     poseCovThreshold: 25.0                      # m^2, threshold for using GPS data
     
@@ -27,36 +26,34 @@
 
     # Sensor Settings
     sensor: robosense                            # lidar sensor type, 'velodyne' or 'ouster' or 'livox' or 'robosense'
-    N_SCAN: 96                                  # number of lidar channel (i.e., Velodyne/Ouster: 16, 32, 64, 128, Livox Horizon: 6)
+    N_SCAN: 48                                  # number of lidar channel (i.e., Velodyne/Ouster: 16, 32, 64, 128, Livox Horizon: 6)
     Horizon_SCAN: 1440                          # lidar horizontal resolution (Velodyne:1800, Ouster:512,1024,2048, Livox Horizon: 4000)
-    downsampleRate: 3                           # default: 1. Downsample your data if too many points(line). i.e., 16 = 64 / 4, 16 = 16 / 1
-    point_filter_num: 2                         # default: 3. Downsample your data if too many points(point). e.g., 16: 1, 32: 5, 64: 8
+    downsampleRate: 1                           # default: 1. Downsample your data if too many points(line). i.e., 16 = 64 / 4, 16 = 16 / 1
+    point_filter_num: 1                         # default: 3. Downsample your data if too many points(point). e.g., 16: 1, 32: 5, 64: 8
     lidarMinRange: 1.0                          # default: 1.0, minimum lidar range to be used
-    lidarMaxRange: 1000.0                       # default: 1000.0, maximum lidar range to be used
+    lidarMaxRange: 1000.0                      # Rated range for the XT32 is 120m
 
     # IMU Settings
     imuType: 0                                  # 0: 6-axis  1: 9-axis
     imuRate: 200.0
-    imuAccNoise: 3.9939570888238808e-03
-    imuGyrNoise: 1.5636343949698187e-03
-    imuAccBiasN: 6.4356659353532566e-05
-    imuGyrBiasN: 3.5640318696367613e-05
-    imuGravity: 9.80511
-    accConversion: 1.0 # convert acc from g to m/s^2
+    imuAccNoise: 1e-04 # 3.9939570888238808e-03
+    imuGyrNoise: 4.5e-03 #1.5636343949698187e-03
+    imuAccBiasN: 0.15e-02 # 6.4356659353532566e-05
+    imuGyrBiasN: 1e-02 # 3.5640318696367613e-05
+    imuGravity: 9.805
+    accConversion: 9.805 # convert acc from g to m/s^2
     imuRPYWeight: 0.01
 
     # Extrinsics: T_lb (lidar -> imu)
-    # IMU is integrated into the LiDAR => identity rotation, zero translation
-    extrinsicTrans: [0.0, 0.0, 0.0]
-    extrinsicRot: [1.0000000,  0.0000000,  0.0000000,
-               0.0000000,  0.7071068,  0.7071068,
-               0.0000000, -0.7071068,  0.7071068]
+    extrinsicTrans: [-0.011, -0.02329, 0.04412]
+    extrinsicRot: [1.0, 0.0, 0.0,
+                    0.0, -1.0, 0.0,
+                    0.0, 0.0, -1.0]
 
     # Extrinsics T_lw (lidar -> world frame)
-    # LiDAR is mounted at -45° around its own x-axis: Rx(-45°)
-    LidarRot: [1.0000000,  0.0000000,  0.0000000,
-               0.0000000,  0.7071068,  0.7071068,
-               0.0000000, -0.7071068,  0.7071068]
+    LidarRot: [  0.0000000, -0.7071068, -0.7071068,
+              1.0000000,  0.0000000,  0.0000000,
+              0.0000000, -0.7071068,  0.7071068 ]
 
     LidarTrans: [-0.41, 0.2835, 0.0]
 
@@ -68,8 +65,9 @@
     extrinsicRPY: [1.0, 0.0, 0.0,
                     0.0, 1.0, 0.0,
                     0.0, 0.0, 1.0]
+
     # voxel filter paprams
-    mappingSurfLeafSize: 0.4                      # default: 0.4 - outdoor, 0.2 - indoor
+    mappingSurfLeafSize: 0.15                     # default: 0.4 - outdoor, 0.2 - indoor
 
     # robot motion constraint (in case you are using a 2D robot)
     z_tollerance: 1000.0                            # meters
@@ -80,20 +78,20 @@
     mappingProcessInterval: 0.0                  # seconds, regulate mapping frequency
 
     # Surrounding map
-    surroundingkeyframeAddingDistThreshold: 1.0   # meters, regulate keyframe adding threshold
-    surroundingkeyframeAddingAngleThreshold: 0.2  # radians, regulate keyframe adding threshold
+    surroundingkeyframeAddingDistThreshold: 0.25   # meters, regulate keyframe adding threshold
+    surroundingkeyframeAddingAngleThreshold: 0.1  # radians, regulate keyframe adding threshold
     surroundingKeyframeDensity: 2.0               # meters, downsample surrounding keyframe poses   
     surroundingKeyframeSearchRadius: 50.0         # meters, within n meters scan-to-map optimization (when loop closure disabled)
-    surroundingKeyframeMapLeafSize: 0.5           # downsample local map point cloud
+    surroundingKeyframeMapLeafSize: 0.3           # downsample local map point cloud
 
     # Loop closure
-    loopClosureEnableFlag: true
+    loopClosureEnableFlag: false
     loopClosureFrequency: 1.0                     # Hz, regulate loop closure constraint add frequency
     surroundingKeyframeSize: 50                   # submap size (when loop closure enabled)
     historyKeyframeSearchRadius: 15.0             # meters, key frame that is within n meters from current pose will be considerd for loop closure
     historyKeyframeSearchTimeDiff: 30.0           # seconds, key frame that is n seconds older will be considered for loop closure
     historyKeyframeSearchNum: 25                  # number of hostory key frames will be fused into a submap for loop closure
-    loopClosureICPSurfLeafSize: 0.5               # downsample icp point cloud  
+    loopClosureICPSurfLeafSize: 0.3               # downsample icp point cloud  
     historyKeyframeFitnessScore: 0.3              # icp threshold, the smaller the better alignment
 
     # Visualization
